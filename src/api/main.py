@@ -8,6 +8,7 @@ from src.db import models
 from src.api import schemas
 from src.db.vector_db import init_qdrant, search_vectors, upsert_vector
 from src.embeddings.embedder import get_embedder
+from src.api.routes import clock_router, todo_router
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -19,11 +20,15 @@ init_qdrant()
 
 app = FastAPI(
     title="AI Marketing Intelligence Agent API",
-    description="A2A-compatible API for accessing advertising intelligence",
+    description="A2A-compatible API for accessing advertising intelligence, with timezone clock and todo list utilities",
     version="1.0.0",
     docs_url="/docs",
     openapi_url="/openapi.json"
 )
+
+# Include routers
+app.include_router(clock_router)
+app.include_router(todo_router)
 
 
 # ============= HEALTH CHECK =============
@@ -34,7 +39,12 @@ def read_root():
     return {
         "status": "ok",
         "message": "AI Marketing Intelligence Agent API is running",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "features": [
+            "Marketing Intelligence (Ads, Creatives, Analysis)",
+            "Timezone Clock",
+            "Todo List Application"
+        ]
     }
 
 
@@ -44,7 +54,12 @@ def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "vector_store": "connected"
+        "vector_store": "connected",
+        "features": {
+            "marketing_intelligence": "available",
+            "timezone_clock": "available",
+            "todo_list": "available"
+        }
     }
 
 
@@ -157,14 +172,15 @@ def create_creative(creative: schemas.CreativeCreate, db: Session = Depends(get_
         db.refresh(db_creative)
         
         # Upsert to vector store
+        ad = db.query(models.Ads).get(db_creative.ad_id)
         upsert_vector(
             point_id=db_creative.id,
             vector=embedding,
             payload={
                 "creative_id": db_creative.id,
                 "ad_id": db_creative.ad_id,
-                "brand_name": db.query(models.Ads).get(db_creative.ad_id).brand_name,
-                "platform": db.query(models.Ads).get(db_creative.ad_id).platform,
+                "brand_name": ad.brand_name if ad else "Unknown",
+                "platform": ad.platform if ad else "Unknown",
             }
         )
         
